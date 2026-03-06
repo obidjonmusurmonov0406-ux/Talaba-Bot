@@ -1,36 +1,38 @@
 import os
 import asyncio
+import wikipedia  # Avval buni o'rnatish kerak
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# Tokeningizni shu yerga qo'ying (Xavfsizlik uchun keyinchalik .env ga o'tamiz)
-TOKEN = "8343853327:AAEviMe3JBMFauHZurr7WJcwvkL2a8kUI8I"
-
+TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Tugmalar
-menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="✍️ Mustaqil ish yozish")],
-    [KeyboardButton(text="ℹ️ Ma'lumot")]
-], resize_keyboard=True)
+# Wikipedia tilini o'zbekchaga sozlaymiz
+wikipedia.set_lang("uz")
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("Salom! Mavzuni yuboring, men reja va matn tuzaman.", reply_markup=menu)
+    await message.answer("Salom! Men tayyorman. Mavzuni yuboring, men matn tayyorlayman.")
 
 @dp.message()
-async def handle_ai(message: types.Message):
-    if message.text == "✍️ Mustaqil ish yozish":
-        await message.answer("Mavzuni kiriting (masalan: 'Amir Temur hayoti'):")
-    else:
-        # Bu yerda sun'iy intellekt matn tayyorlaydi
-        await message.answer(f"✅ '{message.text}' bo'yicha mustaqil ish tayyorlanmoqda...")
+async def handle_work(message: types.Message):
+    mavzu = message.text
+    status_msg = await message.answer(f"🔍 '{mavzu}' bo'yicha ma'lumot qidiryapman...")
+    
+    try:
+        # Wikipedia'dan ma'lumot qidirish
+        summary = wikipedia.summary(mavzu, sentences=10)
         
-        # Namuna matn (Hozircha shablon, keyin buni AI ga ulaymiz)
-        text = f"📚 Mavzu: {message.text}\n\n1. Kirish\n2. Asosiy qism\n3. Xulosa\n\nBu mavzu bo'yicha ma'lumotlar yig'ilmoqda..."
-        await message.answer(text)
+        mustaqil_ish = (
+            f"📚 **Mavzu: {mavzu}**\n\n"
+            f"**REJA:**\n1. Kirish\n2. Mavzu haqida batafsil\n3. Xulosa\n\n"
+            f"**MATN:**\n{summary}\n\n"
+            f"✅ Mustaqil ish tayyor!"
+        )
+        await status_msg.edit_text(mustaqil_ish, parse_mode="Markdown")
+    except:
+        await status_msg.edit_text("❌ Kechirasiz, bu mavzu bo'yicha ma'lumot topa olmadim. Boshqa mavzu sinab ko'ring.")
 
 async def main():
     await dp.start_polling(bot)
