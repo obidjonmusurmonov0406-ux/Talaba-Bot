@@ -2,76 +2,90 @@ import os
 import asyncio
 import wikipedia
 from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.dml.color import RGBColor
+from docx import Document
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-
 wikipedia.set_lang("uz")
 
-# Tugmalar menyusi
 menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="📝 Esse yozish"), KeyboardButton(text="📊 Taqdimot qilish")],
+    [KeyboardButton(text="📝 Esse yozish (Word)"), KeyboardButton(text="📊 Taqdimot (PPTX)")],
     [KeyboardButton(text="ℹ️ Yordam")]
 ], resize_keyboard=True)
 
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    await message.answer("Salom! Men 'Aqlli Talaba' botiman. 🎓\nNima yordam kerak?", reply_markup=menu)
+# --- WORD (ESSE) YARATISH ---
+def create_word(title, content):
+    doc = Document()
+    doc.add_heading(title, 0)
+    doc.add_heading("REJA:", level=1)
+    doc.add_paragraph("1. Kirish\n2. Asosiy qism\n3. Xulosa")
+    doc.add_heading("MATN:", level=1)
+    doc.add_paragraph(content)
+    path = f"{title}.docx"
+    doc.save(path)
+    return path
 
-# --- ESSE YOZISH QISMI ---
-@dp.message(F.text == "📝 Esse yozish")
-async def esse_start(message: types.Message):
-    await message.answer("Esse mavzusini yuboring:")
+# --- DIZAYNLI TAQDIMOT YARATISH ---
+def create_pptx(title, content):
+    prs = Presentation()
+    
+    # 1-Slayd (Titul)
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    title_shape = slide.shapes.title
+    title_shape.text = title
+    # Rang berish
+    title_shape.text_frame.paragraphs[0].font.color.rgb = RGBColor(0, 51, 102) # To'q ko'k
+    slide.shapes.placeholders[1].text = "Tayyorladi: Aqlli Talaba Boti"
 
-# --- TAQDIMOT YARATISH QISMI ---
-@dp.message(F.text == "📊 Taqdimot qilish")
-async def ppt_start(message: types.Message):
-    await message.answer("Taqdimot mavzusini yuboring (masalan: Quyosh tizimi):")
+    # 2-Slayd (Ma'lumot)
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Mavzu tahlili"
+    body = slide.shapes.placeholders[1]
+    body.text = content[:700] # Slaydga ko'p matn sig'maydi
+    
+    path = f"{title}.pptx"
+    prs.save(path)
+    return path
+
+@dp.message(F.text == "📝 Esse yozish (Word)")
+async def esse_req(msg: types.Message):
+    await msg.answer("📝 Esse mavzusini yuboring:")
+
+@dp.message(F.text == "📊 Taqdimot (PPTX)")
+async def pptx_req(msg: types.Message):
+    await msg.answer("📊 Taqdimot mavzusini yuboring:")
 
 @dp.message()
-async def handle_all(message: types.Message):
-    mavzu = message.text
-    status = await message.answer("⏳ Ishlamoqdaman...")
-
+async def handle_docs(message: types.Message):
+    if message.text in ["ℹ️ Yordam", "📝 Esse yozish (Word)", "📊 Taqdimot (PPTX)"]: return
+    
+    status = await message.answer("🔍 Ma'lumot qidirilmoqda va fayl shakllantirilmoqda...")
     try:
-        # Wikipedia'dan asosiy ma'lumotni olamiz
-        search = wikipedia.search(mavzu)
+        search = wikipedia.search(message.text)
         page = wikipedia.page(search[0])
-        info = page.summary[:1500]
-
-        # Agar foydalanuvchi Taqdimot so'ragan bo'lsa (oxirgi bosilgan tugmani tekshirish o'rniga sodda mantiq)
-        if "📊" in str(message.reply_to_message) or len(mavzu) < 50: 
-            # PowerPoint yaratish
-            prs = Presentation()
-            
-            # 1-Slayd: Titul
-            slide1 = prs.slides.add_slide(prs.slide_layouts[0])
-            slide1.shapes.title.text = page.title
-            slide1.shapes.placeholders[1].text = "Mustaqil ish\nTayyorladi: Aqlli Talaba Boti"
-
-            # 2-Slayd: Ma'lumot
-            slide2 = prs.slides.add_slide(prs.slide_layouts[1])
-            slide2.shapes.title.text = "Mavzu haqida"
-            slide2.shapes.placeholders[1].text = info[:500]
-
-            file_path = f"{mavzu}.pptx"
-            prs.save(file_path)
-            
-            # Faylni yuborish
-            input_file = FSInputFile(file_path)
-            await message.answer_document(input_file, caption=f"✅ {mavzu} bo'yicha taqdimot tayyor!")
-            os.remove(file_path) # Serverda joy egallamasligi uchun o'chiramiz
-            await status.delete()
+        full_text = page.content # Esse uchun uzunroq matn
         
-    except Exception as e:
-        await status.edit_text("❌ Xatolik: Mavzuni aniqroq yozing yoki boshqa mavzu sinab ko'ring.")
+        # Word yoki PPTX ekanini aniqlash (oddiy mantiq)
+        if len(full_text) > 0:
+            word_path = create_word(page.title, full_text[:3000]) # Word uchun uzun matn
+            ppt_path = create_pptx(page.title, page.summary)    # PPTX uchun qisqa matn
+            
+            # Ikkalasini ham yuboramiz yoki tanlovga qarab (hozircha ikkalasini yuboradi)
+            await message.answer_document(FSInputFile(word_path), caption="📄 Esse (Word) tayyor!")
+            await message.answer_document(FSInputFile(ppt_path), caption="📊 Taqdimot (PPTX) tayyor!")
+            
+            os.remove(word_path)
+            os.remove(ppt_path)
+            await status.delete()
+            
+    except:
+        await status.edit_text("❌ Mavzu bo'yicha ma'lumot yetarli emas. Boshqa mavzu yozing.")
 
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async def main(): await dp.start_polling(bot)
+if __name__ == "__main__": asyncio.run(main())
