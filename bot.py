@@ -1,64 +1,74 @@
 import os
 import asyncio
 import wikipedia
+from pptx import Presentation
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Wikipedia tilini o'zbekchaga sozlaymiz
 wikipedia.set_lang("uz")
 
 # Tugmalar menyusi
 menu = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="✍️ Mustaqil ish yozish")],
+    [KeyboardButton(text="📝 Esse yozish"), KeyboardButton(text="📊 Taqdimot qilish")],
     [KeyboardButton(text="ℹ️ Yordam")]
 ], resize_keyboard=True)
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer(
-        "Salom! Men 'Aqlli Talaba' botiman. 🎓\n\n"
-        "Mustaqil ish yozish uchun pastdagi tugmani bosing va keyin mavzuni yozib yuboring.",
-        reply_markup=menu
-    )
+    await message.answer("Salom! Men 'Aqlli Talaba' botiman. 🎓\nNima yordam kerak?", reply_markup=menu)
 
-@dp.message(F.text == "✍️ Mustaqil ish yozish")
-async def ask_topic(message: types.Message):
-    await message.answer("📝 Mustaqil ish mavzusini kiriting:\n(Masalan: *Amir Temur* yoki *Fizika*)", parse_mode="Markdown")
+# --- ESSE YOZISH QISMI ---
+@dp.message(F.text == "📝 Esse yozish")
+async def esse_start(message: types.Message):
+    await message.answer("Esse mavzusini yuboring:")
+
+# --- TAQDIMOT YARATISH QISMI ---
+@dp.message(F.text == "📊 Taqdimot qilish")
+async def ppt_start(message: types.Message):
+    await message.answer("Taqdimot mavzusini yuboring (masalan: Quyosh tizimi):")
 
 @dp.message()
-async def search_wiki(message: types.Message):
-    # Agar foydalanuvchi tugmani emas, mavzuni yuborgan bo'lsa
-    if message.text == "ℹ️ Yordam":
-        await message.answer("Mavzu yozing, men u haqida ma'lumot qidiraman.")
-        return
+async def handle_all(message: types.Message):
+    mavzu = message.text
+    status = await message.answer("⏳ Ishlamoqdaman...")
 
-    status = await message.answer("🔎 Ma'lumot qidirilmoqda, iltimos kuting...")
-    
     try:
-        # Avval qidirib ko'ramiz
-        search_results = wikipedia.search(message.text)
-        if not search_results:
-            await status.edit_text("❌ Afsuski, bu mavzuda ma'lumot topilmadi. Boshqa so'zlar bilan urinib ko'ring.")
-            return
+        # Wikipedia'dan asosiy ma'lumotni olamiz
+        search = wikipedia.search(mavzu)
+        page = wikipedia.page(search[0])
+        info = page.summary[:1500]
 
-        # Birinchi topilgan natijani olamiz
-        page = wikipedia.page(search_results[0])
-        text = page.summary[:1000] # Birinchi 1000 ta harfni olamiz
+        # Agar foydalanuvchi Taqdimot so'ragan bo'lsa (oxirgi bosilgan tugmani tekshirish o'rniga sodda mantiq)
+        if "📊" in str(message.reply_to_message) or len(mavzu) < 50: 
+            # PowerPoint yaratish
+            prs = Presentation()
+            
+            # 1-Slayd: Titul
+            slide1 = prs.slides.add_slide(prs.slide_layouts[0])
+            slide1.shapes.title.text = page.title
+            slide1.shapes.placeholders[1].text = "Mustaqil ish\nTayyorladi: Aqlli Talaba Boti"
+
+            # 2-Slayd: Ma'lumot
+            slide2 = prs.slides.add_slide(prs.slide_layouts[1])
+            slide2.shapes.title.text = "Mavzu haqida"
+            slide2.shapes.placeholders[1].text = info[:500]
+
+            file_path = f"{mavzu}.pptx"
+            prs.save(file_path)
+            
+            # Faylni yuborish
+            input_file = FSInputFile(file_path)
+            await message.answer_document(input_file, caption=f"✅ {mavzu} bo'yicha taqdimot tayyor!")
+            os.remove(file_path) # Serverda joy egallamasligi uchun o'chiramiz
+            await status.delete()
         
-        result = (
-            f"📚 **Mavzu: {page.title}**\n\n"
-            f"**REJA:**\n1. Kirish\n2. {page.title} haqida umumiy ma'lumot\n3. Xulosa\n\n"
-            f"**MATN:**\n{text}...\n\n"
-            f"🔗 Batafsil: {page.url}"
-        )
-        await status.edit_text(result)
     except Exception as e:
-        await status.edit_text("❌ Ma'lumot yuklashda xatolik yuz berdi yoki mavzu juda keng. Aniqroq yozing.")
+        await status.edit_text("❌ Xatolik: Mavzuni aniqroq yozing yoki boshqa mavzu sinab ko'ring.")
 
 async def main():
     await dp.start_polling(bot)
