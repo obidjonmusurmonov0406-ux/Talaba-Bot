@@ -1,5 +1,5 @@
 aiogram
 python-dotenv
-google-generativeai
+import google.generativeai
 python-pptx
 python-docx
