@@ -2,3 +2,4 @@ aiogram
 python-dotenv
 wikipedia
 python-pptx
+python-docx
