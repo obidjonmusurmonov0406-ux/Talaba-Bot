@@ -1,5 +1,5 @@
 aiogram
 python-dotenv
-wikipedia
+google-generativeai
 python-pptx
 python-docx
