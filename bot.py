@@ -2,17 +2,17 @@ import os
 import asyncio
 import google.generativeai as genai
 from pptx import Presentation
+from pptx.util import Inches, Pt
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 
-# --- KONFIGURATSIYA ---
+# --- SOZLAMALAR ---
 TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Gemini AI sozlash
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -22,26 +22,38 @@ dp = Dispatcher()
 class BotStates(StatesGroup):
     waiting_for_pptx = State()
 
-# Taqdimot funksiyasi (KUCHAYTIRILGAN)
+# --- MENYU ---
+menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="📊 Professional Taqdimot (PPTX)")]
+], resize_keyboard=True)
+
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    await message.answer(
+        "Salom! Men professional taqdimotlar yaratuvchi botman. 🚀", 
+        reply_markup=menu
+    )
+
 @dp.message(F.text == "📊 Professional Taqdimot (PPTX)")
 async def pptx_req(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_pptx)
-    await message.answer("📊 Taqdimot mavzusini yuboring (Masalan: 'Global isish'):")
+    await message.answer("📊 Taqdimot mavzusini yuboring:")
 
 @dp.message(BotStates.waiting_for_pptx)
 async def handle_pptx(message: types.Message, state: FSMContext):
-    msg = await message.answer("🎨 Slaydlar professional darajada tayyorlanmoqda...")
+    msg = await message.answer("🎨 Slaydlar dizayni va mazmuni shakllantirilmoqda...")
     try:
-        # Kuchaytirilgan Prompt
+        # Promptni kuchaytirish
         prompt = (
-            f"'{message.text}' mavzusida 7 ta professional slayd yoz. "
+            f"'{message.text}' mavzusida 8 ta slayddan iborat professional taqdimot matni yoz. "
             f"Har bir slayd 'SLAYD:' so'zi bilan boshlansin. "
-            f"Slaydlar: 1.Kirish, 2-3.Mavzu mohiyati, 4-5.Tahlil va misollar, 6.Faktlar, 7.Xulosa."
+            f"Tuzilishi: 1.Sarlavha, 2.Reja, 3.Kirish, 4-6.Asosiy tahlil, 7.Xulosa, 8.Foydalanilgan manbalar. "
+            f"Faqat o'zbek tilida, akademik tilda yoz."
         )
         response = model.generate_content(prompt)
         
         prs = Presentation()
-        # 16:9 keng format
+        # 16:9 keng format (Zamonaviy dizayn)
         prs.slide_width = 12192000
         prs.slide_height = 6858000
         
@@ -49,16 +61,29 @@ async def handle_pptx(message: types.Message, state: FSMContext):
         for data in slides_data[1:]:
             slide = prs.slides.add_slide(prs.slide_layouts[1])
             lines = data.strip().split("\n")
+            
             if lines:
-                slide.shapes.title.text = lines[0].replace(":", "").strip()
-                slide.placeholders[1].text = "\n".join(lines[1:]).strip()
-        
+                # Sarlavha qismini sozlash
+                title = slide.shapes.title
+                title.text = lines[0].replace(":", "").strip()
+                
+                # Matn qismini punktlarga bo'lish
+                content = slide.placeholders[1]
+                clean_lines = [l.strip() for l in lines[1:] if l.strip()]
+                content.text = "\n".join(clean_lines)
+
         file_path = f"taqdimot_{message.from_user.id}.pptx"
         prs.save(file_path)
-        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
+        
+        await message.answer_document(
+            FSInputFile(file_path), 
+            caption=f"✅ '{message.text}' mavzusidagi professional taqdimot tayyor!"
+        )
         os.remove(file_path)
+        
     except Exception as e:
-        await message.answer(f"❌ Xato: {str(e)}")
+        await message.answer(f"❌ Xatolik yuz berdi: {str(e)}")
+    
     await msg.delete()
     await state.clear()
 
