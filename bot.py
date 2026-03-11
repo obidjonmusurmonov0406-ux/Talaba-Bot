@@ -13,15 +13,15 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Gemini AI ulanishini eng barqaror v1 versiyasiga majburlaymiz
+# API kalitni tekshirish va sozlash
+if not TOKEN or not GEMINI_KEY:
+    raise ValueError("BOT_TOKEN yoki GEMINI_API_KEY topilmadi!")
+
 genai.configure(api_key=GEMINI_KEY)
 
-# Modelni xatosiz aniqlash funksiyasi
-def get_gemini_model():
-    # v1beta xatosidan qochish uchun eng oddiy model nomidan foydalanamiz
-    return genai.GenerativeModel('gemini-1.5-flash-latest')
-
-model = get_gemini_model()
+# Modelni eng barqaror ko'rinishda tanlash
+# v1beta xatosidan qochish uchun 'models/' prefiksini qo'shamiz
+model = genai.GenerativeModel('models/gemini-1.5-flash')
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -30,7 +30,7 @@ class BotStates(StatesGroup):
     waiting_for_esse = State()
     waiting_for_pptx = State()
 
-# --- ASOSIY MENYU ---
+# --- MENYU ---
 menu = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="📝 Sifatli Esse (Word)")],
     [KeyboardButton(text="📊 Professional Taqdimot (PPTX)")]
@@ -40,11 +40,12 @@ menu = ReplyKeyboardMarkup(keyboard=[
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "Salom! Men professional esse va taqdimotlar yaratuvchi botman. 🚀", 
+        "Salom! Men Gemini AI bilan ishlaydigan aqlli yordamchiman. 🎓\n"
+        "Tahliliy ishlar tayyorlash uchun xizmatni tanlang:", 
         reply_markup=menu
     )
 
-# --- ESSE YARATISH ---
+# --- ESSE ---
 @dp.message(F.text == "📝 Sifatli Esse (Word)")
 async def esse_req(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_esse)
@@ -52,23 +53,22 @@ async def esse_req(message: types.Message, state: FSMContext):
 
 @dp.message(BotStates.waiting_for_esse)
 async def handle_esse(message: types.Message, state: FSMContext):
-    msg = await message.answer("🧠 AI akademik esse yozmoqda...")
+    msg = await message.answer("🧠 AI tahlil qilmoqda...")
     try:
-        response = model.generate_content(f"{message.text} mavzusida o'zbek tilida esse yoz.")
+        response = model.generate_content(f"{message.text} mavzusida o'zbek tilida akademik esse yoz.")
         doc = Document()
         doc.add_heading(message.text, 0)
         doc.add_paragraph(response.text)
-        
-        file_path = f"esse_{message.from_user.id}.docx"
-        doc.save(file_path)
-        await message.answer_document(FSInputFile(file_path), caption="✅ Esse tayyor!")
-        os.remove(file_path)
+        path = f"esse_{message.from_user.id}.docx"
+        doc.save(path)
+        await message.answer_document(FSInputFile(path))
+        os.remove(path)
     except Exception as e:
-        await message.answer(f"❌ Xato: API bilan ulanishda muammo bo'ldi. Birozdan so'ng qayta urinib ko'ring.")
+        await message.answer("❌ API ulanishda xato. Iltimos, API kalit va mintaqa sozlamalarini tekshiring.")
     await msg.delete()
     await state.clear()
 
-# --- TAQDIMOT YARATISH ---
+# --- TAQDIMOT ---
 @dp.message(F.text == "📊 Professional Taqdimot (PPTX)")
 async def pptx_req(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_pptx)
@@ -76,28 +76,22 @@ async def pptx_req(message: types.Message, state: FSMContext):
 
 @dp.message(BotStates.waiting_for_pptx)
 async def handle_pptx(message: types.Message, state: FSMContext):
-    msg = await message.answer("🎨 Professional slaydlar tayyorlanmoqda...")
+    msg = await message.answer("🎨 Slaydlar tayyorlanmoqda...")
     try:
-        prompt = f"'{message.text}' mavzusida 7 ta slayd uchun matn yoz. Har bir slaydni 'SLAYD:' so'zi bilan ajrat."
+        prompt = f"'{message.text}' haqida 7 slaydli reja yoz. Har slaydni 'SLAYD:' so'zi bilan ajrat."
         response = model.generate_content(prompt)
-        
         prs = Presentation()
-        prs.slide_width, prs.slide_height = 12192000, 6858000 # 16:9
-        
-        slides_data = response.text.split("SLAYD:")
-        for data in slides_data[1:]:
+        prs.slide_width, prs.slide_height = 12192000, 6858000
+        for data in response.text.split("SLAYD:")[1:]:
             slide = prs.slides.add_slide(prs.slide_layouts[1])
-            lines = data.strip().split("\n")
-            if lines:
-                slide.shapes.title.text = lines[0].replace(":", "").strip()
-                slide.placeholders[1].text = "\n".join(lines[1:]).strip()
-
-        file_path = f"ppt_{message.from_user.id}.pptx"
-        prs.save(file_path)
-        await message.answer_document(FSInputFile(file_path), caption="✅ Taqdimot tayyor!")
-        os.remove(file_path)
-    except Exception as e:
-        await message.answer(f"❌ Xato: Taqdimot yaratib bo'lmadi.")
+            slide.shapes.title.text = message.text
+            slide.placeholders[1].text = data.strip()
+        path = f"ppt_{message.from_user.id}.pptx"
+        prs.save(path)
+        await message.answer_document(FSInputFile(path))
+        os.remove(path)
+    except Exception:
+        await message.answer("❌ Taqdimotda xatolik yuz berdi.")
     await msg.delete()
     await state.clear()
 
