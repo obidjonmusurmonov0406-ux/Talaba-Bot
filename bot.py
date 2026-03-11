@@ -13,11 +13,12 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-# API ni sozlash
+# Gemini API ni eng xavfsiz versiyada sozlash
 genai.configure(api_key=GEMINI_KEY)
 
-# MUHIM: Model nomini 'models/' prefiksi bilan yozamiz (404 xatosini oldini oladi)
-model = genai.GenerativeModel('models/gemini-1.5-flash')
+# MUHIM: Ba'zi mintaqalarda faqat 'gemini-pro' yoki 'gemini-1.5-flash' ishlaydi
+# Biz eng so'nggi va barqaror model nomidan foydalanamiz
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -35,11 +36,7 @@ menu = ReplyKeyboardMarkup(keyboard=[
 @dp.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer(
-        "Salom! Bot yangilandi va ishlashga tayyor. 🚀\n"
-        "Xizmatlardan birini tanlang:", 
-        reply_markup=menu
-    )
+    await message.answer("Xizmatlardan birini tanlang:", reply_markup=menu)
 
 # --- ESSE QISMI ---
 @dp.message(F.text == "📝 Sifatli Esse (Word)")
@@ -49,59 +46,28 @@ async def esse_req(message: types.Message, state: FSMContext):
 
 @dp.message(BotStates.waiting_for_esse)
 async def handle_esse(message: types.Message, state: FSMContext):
-    msg = await message.answer("🧠 AI akademik esse yozmoqda...")
+    status_msg = await message.answer("🧠 AI tahlil qilmoqda...")
     try:
         # AI dan javob olish
         response = model.generate_content(f"{message.text} mavzusida o'zbek tilida akademik esse yoz.")
         
-        # Word fayl yaratish
         doc = Document()
         doc.add_heading(message.text, 0)
         doc.add_paragraph(response.text)
         
-        file_path = f"esse_{message.from_user.id}.docx"
-        doc.save(file_path)
+        path = f"esse_{message.from_user.id}.docx"
+        doc.save(path)
         
-        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
-        os.remove(file_path)
+        await message.answer_document(FSInputFile(path), caption="✅ Esse tayyor!")
+        os.remove(path)
     except Exception as e:
-        await message.answer(f"❌ Xato: API bilan bog'lanishda muammo bo'ldi. Kalitingiz hali faollashmagan bo'lishi mumkin.")
-    await msg.delete()
-    await state.clear()
+        # Xatoni foydalanuvchiga tushunarli qilib ko'rsatish
+        await message.answer(f"❌ API Xatosi yuz berdi. Iltimos, bir ozdan so'ng qayta urinib ko'ring.")
+        print(f"DEBUG: {e}") # Railway loglarida xatoni ko'rish uchun
+    finally:
+        await status_msg.delete()
+        await state.clear()
 
 # --- TAQDIMOT QISMI ---
 @dp.message(F.text == "📊 Professional Taqdimot (PPTX)")
-async def pptx_req(message: types.Message, state: FSMContext):
-    await state.set_state(BotStates.waiting_for_pptx)
-    await message.answer("📊 Taqdimot mavzusini yuboring:")
-
-@dp.message(BotStates.waiting_for_pptx)
-async def handle_pptx(message: types.Message, state: FSMContext):
-    msg = await message.answer("🎨 Slaydlar tayyorlanmoqda...")
-    try:
-        prompt = f"'{message.text}' haqida 7 slaydli reja yoz. Har slaydni 'SLAYD:' so'zi bilan ajrat."
-        response = model.generate_content(prompt)
-        
-        prs = Presentation()
-        prs.slide_width, prs.slide_height = 12192000, 6858000 # 16:9 format
-        
-        slides_data = response.text.split("SLAYD:")
-        for data in slides_data[1:]:
-            slide = prs.slides.add_slide(prs.slide_layouts[1])
-            slide.shapes.title.text = message.text
-            slide.placeholders[1].text = data.strip()
-
-        file_path = f"ppt_{message.from_user.id}.pptx"
-        prs.save(file_path)
-        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
-        os.remove(file_path)
-    except Exception:
-        await message.answer("❌ Taqdimot yaratishda xatolik.")
-    await msg.delete()
-    await state.clear()
-
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async def pptx_req(message: types.Message,
