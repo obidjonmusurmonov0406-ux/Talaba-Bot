@@ -13,14 +13,10 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-# API kalitni tekshirish va sozlash
-if not TOKEN or not GEMINI_KEY:
-    raise ValueError("BOT_TOKEN yoki GEMINI_API_KEY topilmadi!")
-
+# API ni sozlash
 genai.configure(api_key=GEMINI_KEY)
 
-# Modelni eng barqaror ko'rinishda tanlash
-# v1beta xatosidan qochish uchun 'models/' prefiksini qo'shamiz
+# MUHIM: Model nomini 'models/' prefiksi bilan yozamiz (404 xatosini oldini oladi)
 model = genai.GenerativeModel('models/gemini-1.5-flash')
 
 bot = Bot(token=TOKEN)
@@ -40,12 +36,12 @@ menu = ReplyKeyboardMarkup(keyboard=[
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "Salom! Men Gemini AI bilan ishlaydigan aqlli yordamchiman. 🎓\n"
-        "Tahliliy ishlar tayyorlash uchun xizmatni tanlang:", 
+        "Salom! Bot yangilandi va ishlashga tayyor. 🚀\n"
+        "Xizmatlardan birini tanlang:", 
         reply_markup=menu
     )
 
-# --- ESSE ---
+# --- ESSE QISMI ---
 @dp.message(F.text == "📝 Sifatli Esse (Word)")
 async def esse_req(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_esse)
@@ -53,22 +49,27 @@ async def esse_req(message: types.Message, state: FSMContext):
 
 @dp.message(BotStates.waiting_for_esse)
 async def handle_esse(message: types.Message, state: FSMContext):
-    msg = await message.answer("🧠 AI tahlil qilmoqda...")
+    msg = await message.answer("🧠 AI akademik esse yozmoqda...")
     try:
+        # AI dan javob olish
         response = model.generate_content(f"{message.text} mavzusida o'zbek tilida akademik esse yoz.")
+        
+        # Word fayl yaratish
         doc = Document()
         doc.add_heading(message.text, 0)
         doc.add_paragraph(response.text)
-        path = f"esse_{message.from_user.id}.docx"
-        doc.save(path)
-        await message.answer_document(FSInputFile(path))
-        os.remove(path)
+        
+        file_path = f"esse_{message.from_user.id}.docx"
+        doc.save(file_path)
+        
+        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
+        os.remove(file_path)
     except Exception as e:
-        await message.answer("❌ API ulanishda xato. Iltimos, API kalit va mintaqa sozlamalarini tekshiring.")
+        await message.answer(f"❌ Xato: API bilan bog'lanishda muammo bo'ldi. Kalitingiz hali faollashmagan bo'lishi mumkin.")
     await msg.delete()
     await state.clear()
 
-# --- TAQDIMOT ---
+# --- TAQDIMOT QISMI ---
 @dp.message(F.text == "📊 Professional Taqdimot (PPTX)")
 async def pptx_req(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_pptx)
@@ -80,18 +81,22 @@ async def handle_pptx(message: types.Message, state: FSMContext):
     try:
         prompt = f"'{message.text}' haqida 7 slaydli reja yoz. Har slaydni 'SLAYD:' so'zi bilan ajrat."
         response = model.generate_content(prompt)
+        
         prs = Presentation()
-        prs.slide_width, prs.slide_height = 12192000, 6858000
-        for data in response.text.split("SLAYD:")[1:]:
+        prs.slide_width, prs.slide_height = 12192000, 6858000 # 16:9 format
+        
+        slides_data = response.text.split("SLAYD:")
+        for data in slides_data[1:]:
             slide = prs.slides.add_slide(prs.slide_layouts[1])
             slide.shapes.title.text = message.text
             slide.placeholders[1].text = data.strip()
-        path = f"ppt_{message.from_user.id}.pptx"
-        prs.save(path)
-        await message.answer_document(FSInputFile(path))
-        os.remove(path)
+
+        file_path = f"ppt_{message.from_user.id}.pptx"
+        prs.save(file_path)
+        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
+        os.remove(file_path)
     except Exception:
-        await message.answer("❌ Taqdimotda xatolik yuz berdi.")
+        await message.answer("❌ Taqdimot yaratishda xatolik.")
     await msg.delete()
     await state.clear()
 
