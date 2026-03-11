@@ -13,8 +13,9 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-# Gemini AI barqaror modelini sozlash
+# Gemini AI barqaror sozlamasi
 genai.configure(api_key=GEMINI_KEY)
+# Eng barqaror model versiyasidan foydalanamiz
 model = genai.GenerativeModel('gemini-1.5-flash') 
 
 bot = Bot(token=TOKEN)
@@ -34,7 +35,7 @@ menu = ReplyKeyboardMarkup(keyboard=[
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
-        "Salom! Men professional esse va taqdimotlar yaratuvchi botman. 🚀\n"
+        "Salom! Men professional esse va taqdimotlar yaratuvchi aqlli yordamchingizman. 🚀\n"
         "Qaysi xizmatdan foydalanamiz?", 
         reply_markup=menu
     )
@@ -49,23 +50,23 @@ async def esse_req(message: types.Message, state: FSMContext):
 async def handle_esse(message: types.Message, state: FSMContext):
     msg = await message.answer("🧠 AI akademik esse yozmoqda...")
     try:
-        prompt = f"'{message.text}' mavzusida o'zbek tilida akademik esse yoz. Reja, Kirish, Asosiy qism va Xulosa bo'lsin."
+        prompt = f"'{message.text}' mavzusida o'zbek tilida akademik esse yoz. Tarkib: Reja, Kirish, 3 ta asosiy tahliliy qism va Xulosa bo'lsin."
         response = model.generate_content(prompt)
         
         doc = Document()
         doc.add_heading(message.text, 0)
         doc.add_paragraph(response.text)
         
-        file_path = f"esse_{message.from_user.id}.docx"
-        doc.save(file_path)
-        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
-        os.remove(file_path)
+        file_name = f"esse_{message.from_user.id}.docx"
+        doc.save(file_name)
+        await message.answer_document(FSInputFile(file_name), caption=f"✅ '{message.text}' mavzusida esse tayyor!")
+        os.remove(file_name)
     except Exception as e:
-        await message.answer(f"❌ Esse xatosi: {str(e)}")
+        await message.answer(f"❌ Esse yaratishda xato: {str(e)}")
     await msg.delete()
     await state.clear()
 
-# --- TAQDIMOT YARATISH QISMI ---
+# --- PROFESSIONAL TAQDIMOT QISMI ---
 @dp.message(F.text == "📊 Professional Taqdimot (PPTX)")
 async def pptx_req(message: types.Message, state: FSMContext):
     await state.set_state(BotStates.waiting_for_pptx)
@@ -76,13 +77,15 @@ async def handle_pptx(message: types.Message, state: FSMContext):
     msg = await message.answer("🎨 Professional slaydlar tayyorlanmoqda...")
     try:
         prompt = (
-            f"'{message.text}' mavzusida 8 ta professional slayd matnini yoz. "
-            f"Har bir slayd 'SLAYD:' so'zi bilan boshlansin. Faqat o'zbekcha."
+            f"'{message.text}' mavzusida 10 slayddan iborat professional taqdimot rejasi yoz. "
+            f"Har bir slaydni 'SLAYD:' so'zi bilan boshla. Tarkibi: Reja, Kirish, "
+            f"Mavzu tahlili, Faktlar va Xulosa bo'lsin. Faqat o'zbekcha."
         )
         response = model.generate_content(prompt)
         
         prs = Presentation()
-        prs.slide_width, prs.slide_height = 12192000, 6858000 # 16:9 format
+        # 16:9 keng format dizayni
+        prs.slide_width, prs.slide_height = 12192000, 6858000
         
         slides_data = response.text.split("SLAYD:")
         for data in slides_data[1:]:
@@ -92,12 +95,12 @@ async def handle_pptx(message: types.Message, state: FSMContext):
                 slide.shapes.title.text = lines[0].replace(":", "").strip()
                 slide.placeholders[1].text = "\n".join(lines[1:]).strip()
 
-        file_path = f"pptx_{message.from_user.id}.pptx"
-        prs.save(file_path)
-        await message.answer_document(FSInputFile(file_path), caption=f"✅ {message.text} tayyor!")
-        os.remove(file_path)
+        file_name = f"taqdimot_{message.from_user.id}.pptx"
+        prs.save(file_name)
+        await message.answer_document(FSInputFile(file_name), caption=f"✅ '{message.text}' mavzusida professional taqdimot tayyor!")
+        os.remove(file_name)
     except Exception as e:
-        await message.answer(f"❌ Taqdimot xatosi: {str(e)}")
+        await message.answer(f"❌ Taqdimot yaratishda xato: {str(e)}")
     await msg.delete()
     await state.clear()
 
